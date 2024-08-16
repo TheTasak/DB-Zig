@@ -1,6 +1,10 @@
 const std = @import("std");
 const dm = @import("disk_manager.zig");
 const c = @import("config.zig");
+const p = @import("page.zig");
+const pg = @import("page_guard.zig");
+const Page = p.Page;
+const PageGuard = pg.PageGuard;
 
 
 pub const BufferPoolManager = struct {
@@ -12,23 +16,23 @@ pub const BufferPoolManager = struct {
 		return self.pool_size;
 	}
 
-	fn getPages(self: BufferPoolManager) void {
+	fn getPages(self: BufferPoolManager) *Page {
 
 	}
 
-	fn newPage(self: *BufferPoolManager, page_id: usize) void {
+	fn newPage(self: *BufferPoolManager, page_id: usize) *Page {
 
 	}
 
-	fn newGuardedPage(self: *BufferPoolManager, page_id: usize) void {
+	fn newGuardedPage(self: *BufferPoolManager, page_id: usize) PageGuard {
 
 	}
 
-	fn fetchPage(self: *BufferPoolManager, page_id: usize, access_type: AccessType) void {
+	fn fetchPage(self: *BufferPoolManager, page_id: usize, access_type: AccessType) *Page {
 
 	}
 
-	fn fetchPageBasic(self: *BufferPoolManager, page_id: usize) void {
+	fn fetchPageBasic(self: *BufferPoolManager, page_id: usize) PageGuard {
 
 	}
 

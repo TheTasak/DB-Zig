@@ -2,6 +2,7 @@ const std = @import("std");
 const dbms = @import("dbms.zig");
 const dm = @import("disk_manager.zig");
 const c = @import("config.zig");
+const p = @import("page.zig");
 
 const ERROR_ARGS = error{
 	WRONG_ARGUMENT,
@@ -83,11 +84,15 @@ pub fn main() !void {
 	var buffer: [c.PAGE_SIZE]u8 = [_]u8{0} ** c.PAGE_SIZE;
 	var data: [c.PAGE_SIZE]u8 = [_]u8{0} ** c.PAGE_SIZE;
 
-	const test_string = "A test string.";
+	const test_string = "Many more where it came from.";
 	@memcpy(data[0..test_string.len], test_string);
 
+// 	try disk_manager.readPage(0, &buffer);
+// 	try disk_manager.writePage(2, &data);
 	try disk_manager.readPage(0, &buffer);
-	try disk_manager.writePage(8, &data);
-	try disk_manager.readPage(0, &buffer);
-	std.debug.print("DATA: {any}", .{buffer});
+	std.debug.print("DATA: {s}", .{buffer});
+	var page = p.Page{};
+	try page.init();
+	std.debug.print("TEST: {any}", .{page.data.?});
+// 	defer page.deinit();
 }
