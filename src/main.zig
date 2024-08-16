@@ -94,5 +94,5 @@ pub fn main() !void {
 	var page = p.Page{};
 	try page.init();
 	std.debug.print("TEST: {any}", .{page.data.?});
-// 	defer page.deinit();
+	defer page.deinit();
 }
