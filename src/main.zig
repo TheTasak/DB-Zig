@@ -104,8 +104,11 @@ pub fn main() !void {
     // 	arg.handleArguments() catch |err| switch (err) {
     // 		else => std.debug.print("{any}\n", .{err}),
     // 	};
-    var b_tree = try btree.BTree(3).init(allocator);
+    var b_tree = try btree.BTree(u16, u16, 3).init(allocator);
     defer b_tree.deinit();
-    const value = b_tree.find(2);
-    std.debug.print("HELLO: {any}\n", .{value});
+    // const value = b_tree.find(2);
+    // std.debug.print("HELLO: {any}\n", .{value});
+    try b_tree.insert(1, 100);
+    try b_tree.insert(3, 300);
+    try b_tree.insert(2, 200);
 }
