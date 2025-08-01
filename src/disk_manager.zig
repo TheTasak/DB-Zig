@@ -32,9 +32,9 @@ pub const DiskManager = struct{
 			try self.file.?.seekTo(offset);
 			const read_count = try self.file.?.read(page_out);
 			_ = read_count;
-// 			if (read_count < c.PAGE_SIZE) {
-// 				@memset(page_out, 0);
-// 			}
+// if (read_count < c.PAGE_SIZE) {
+// @memset(page_out, 0);
+// }
 		}
 	}
 

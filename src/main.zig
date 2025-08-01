@@ -83,32 +83,34 @@ fn tryDiskManager() void {
     const test_string = "Many more where it came from.";
     @memcpy(data[0..test_string.len], test_string);
 
-    // 	try disk_manager.readPage(0, &buffer);
-    // 	try disk_manager.writePage(2, &data);
+    // try disk_manager.readPage(0, &buffer);
+    // try disk_manager.writePage(2, &data);
     try disk_manager.readPage(0, &buffer);
     std.debug.print("DATA: {s}", .{buffer});
-    // 	var page = p.Page{};
-    // 	try page.init();
-    // 	std.debug.print("TEST: {any}", .{page.data.?});
-    // 	defer page.deinit();
+    // var page = p.Page{};
+    // try page.init();
+    // std.debug.print("TEST: {any}", .{page.data.?});
+    // defer page.deinit();
 }
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    // 	const args = try std.process.argsAlloc(allocator);
-    // 	defer std.process.argsFree(allocator, args);
+    // const args = try std.process.argsAlloc(allocator);
+    // defer std.process.argsFree(allocator, args);
     //
-    // 	const arg = Args{.args = args[1..]};
-    // 	arg.print();
-    // 	arg.handleArguments() catch |err| switch (err) {
-    // 		else => std.debug.print("{any}\n", .{err}),
-    // 	};
+    // const arg = Args{.args = args[1..]};
+    // arg.print();
+    // arg.handleArguments() catch |err| switch (err) {
+    // else => std.debug.print("{any}\n", .{err}),
+    // };
     var b_tree = try btree.BTree(u16, u16, 3).init(allocator);
     defer b_tree.deinit();
     // const value = b_tree.find(2);
     // std.debug.print("HELLO: {any}\n", .{value});
-    try b_tree.insert(1, 100);
-    try b_tree.insert(3, 300);
-    try b_tree.insert(2, 200);
+    try b_tree.insert(3, 100);
+    try b_tree.insert(4, 300);
+    try b_tree.insert(1, 200);
+    try b_tree.insert(2, 900);
+    try b_tree.insert(10, 600);
 }

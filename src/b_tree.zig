@@ -1,5 +1,7 @@
 const std = @import("std");
 
+
+
 pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type {
     return struct {
         const This = @This();
@@ -27,7 +29,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         }
 
         fn findIterate(this: This, key: K, current_node: *Node) ?V {
-            const is_leaf_node = current_node.level == this.max_level;
+            const is_leaf_node = current_node.level == this.max_level and current_node.level != 0;
 
             for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
                 if (n_key == null) return null;
@@ -52,13 +54,6 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         }
 
         pub fn insert(this: *This, key: K, value: V) !void {
-            const val_exists = this.findValue(key) != null;
-
-            // Probably need to handle multiple of the same keys
-            if (val_exists) {
-                return;
-            }
-
             var parent_array = std.ArrayList(*Node).init(this.gpa);
             defer parent_array.deinit();
 
@@ -69,32 +64,56 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
                 try parent_array.append(found.?);
                 found = this.findIterateNode(key, found.?);
             }
-            const firstItem = parent_array.items[0];
+            var node: *Node = undefined;
 
-            for (0..parent_array.items.len) |index| {
-                var current_item = parent_array.items[parent_array.items.len - index - 1];
-                if (!current_item.hasSpace()) {
-                    // TODO: Need to break up parent node recursively
-                    break;
-                }
-
-                try current_item.insert(key, value);
+            if (parent_array.items.len == 1) {
+                node = try this.createNode(1);
+                const blank = this.findBlankSlot(this.root_node).?;
+                // there can be no blank slots in root, then go down and search for new
+                this.root_node.keys[blank] = key;
+                this.root_node.pointers[blank] = node;
+            } else {
+                node = parent_array.items[parent_array.items.len - 1];
             }
-            std.debug.print("{any} {d}\n", .{ firstItem, value });
+            try node.insert(key, value);
+            this.print();
         }
 
-        fn findIterateNode(this: This, key: K, current_node: *Node) ?*Node {
-            const is_leaf_node = current_node.level == this.max_level;
+        fn findBlankSlot(_: This, current_node: *Node) ?usize {
+           for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
+              if (n_key == null) {
+                  return index;
+              }
+           }
+           return null;
+        }
 
-            _ = key;
-            if (is_leaf_node) return null;
-            if (!current_node.hasSpace()) return null;
+        fn createNode(this: This, level: comptime_int) !*Node {
+            const new_node = try this.gpa.create(Node);
+            errdefer this.gpa.destroy(new_node);
 
-            return null;
+            new_node.* = Node.init(level);
+            return new_node;
+        }
+
+        fn findIterateNode(_: This, key: K, current_node: *Node) ?*Node {
+            for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
+                if (n_key == null) {
+                    return null;
+                }
+
+                if (key < n_key.?) {
+                    return current_node.pointers[index];
+                }
+            }
+            return current_node.pointers[current_node.pointers.len - 1];
         }
 
         pub fn print(this: This) void {
-            std.debug.print("VALUES: {d}\n", .{this.rootNode.getValues()});
+            std.debug.print("POINTERS {any}\n", .{this.root_node.pointers});
+            std.debug.print("KEYS {any}\n", .{this.root_node.keys});
+            std.debug.print("VALUES {any}\n", .{this.root_node.values});
+            std.debug.print("\n", .{});
         }
     };
 }
@@ -126,10 +145,27 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
 
         pub fn insert(this: *This, key: K, value: V) !void {
             if (!this.hasSpace()) return error.OutOfBounds;
-            this.keys[m - this.slots] = key;
-            this.values[m - this.slots] = value;
+
+            // Find the correct place for inserting in regards to key sorting
+            var insert_index: usize = undefined;
+            for (this.keys, 0..this.keys.len) |n_key, index| {
+                if (n_key == null or key < n_key.?) {
+                    insert_index = index;
+                    break;
+                }
+            }
+
+            // Shift all values to the right of insertion place
+            for (0..this.keys.len-insert_index-1) |index| {
+                const change_index = this.keys.len-index-1;
+                this.keys[change_index] = this.keys[change_index-1];
+                this.values[change_index] = this.values[change_index-1];
+            }
+
+            // Add new value
+            this.keys[insert_index] = key;
+            this.values[insert_index] = value;
             this.slots -= 1;
-            // TODO: Sort keys, values and pointers based on key
         }
 
         pub fn upperBound(this: This) K {
