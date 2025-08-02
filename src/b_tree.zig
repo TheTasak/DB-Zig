@@ -20,37 +20,20 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         }
 
         pub fn deinit(this: *This) void {
-            // TODO: This should destroy all the children recursively
+            this.deinitRecursive(this.root_node);
             this.gpa.destroy(this.root_node);
+        }
+
+        fn deinitRecursive(this: *This, node: *Node) void {
+            for (node.pointers, 0..node.pointers.len) |iter_node, _| {
+                const delete_node = iter_node orelse break;
+                this.deinitRecursive(delete_node);
+                this.gpa.destroy(delete_node);
+            }
         }
 
         pub fn findValue(this: This, key: K) ?V {
             return this.findIterate(key, this.root_node);
-        }
-
-        fn findIterate(this: This, key: K, current_node: *Node) ?V {
-            const is_leaf_node = current_node.level == this.max_level and current_node.level != 0;
-
-            for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
-                if (n_key == null) return null;
-
-                if (key == n_key) return current_node.values[index];
-                if (key < n_key.? and !is_leaf_node) {
-                    return this.findIterate(key, current_node.pointers[index].?);
-                } else {
-                    return null;
-                }
-            }
-
-            if (current_node.keys[m - 1]) |n_key| {
-                if (key < n_key and !is_leaf_node) {
-                    return this.findIterate(key, current_node.pointers[m].?);
-                } else {
-                    return null;
-                }
-            }
-
-            return null;
         }
 
         pub fn insert(this: *This, key: K, value: V) !void {
@@ -64,18 +47,22 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
                 try parent_array.append(found.?);
                 found = this.findIterateNode(key, found.?);
             }
-            var node: *Node = undefined;
+            var insert_node: *Node = undefined;
 
             if (parent_array.items.len == 1) {
-                node = try this.createNode(1);
-                const blank = this.findBlankSlot(this.root_node).?;
-                // there can be no blank slots in root, then go down and search for new
+                const left_node = try this.createNode(1);
+                insert_node = try this.createNode(1);
+
+                var blank = this.findBlankSlot(this.root_node).?;
                 this.root_node.keys[blank] = key;
-                this.root_node.pointers[blank] = node;
+                this.root_node.pointers[blank] = left_node;
+
+                blank = this.findBlankSlot(this.root_node).?;
+                this.root_node.pointers[blank] = insert_node;
             } else {
-                node = parent_array.items[parent_array.items.len - 1];
+                insert_node = parent_array.items[parent_array.items.len - 1];
             }
-            try node.insert(key, value);
+            try insert_node.insert(key, value);
             this.print();
         }
 
@@ -98,8 +85,10 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
 
         fn findIterateNode(_: This, key: K, current_node: *Node) ?*Node {
             for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
-                if (n_key == null) {
+                if (n_key == null and index == 0) {
                     return null;
+                } else if (n_key == null and index != 0) {
+                    return current_node.pointers[index];
                 }
 
                 if (key < n_key.?) {

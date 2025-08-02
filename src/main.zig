@@ -109,8 +109,8 @@ pub fn main() !void {
     // const value = b_tree.find(2);
     // std.debug.print("HELLO: {any}\n", .{value});
     try b_tree.insert(3, 100);
-    try b_tree.insert(4, 300);
+    try b_tree.insert(10, 300);
     try b_tree.insert(1, 200);
     try b_tree.insert(2, 900);
-    try b_tree.insert(10, 600);
+    try b_tree.insert(4, 600);
 }
