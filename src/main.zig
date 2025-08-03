@@ -113,4 +113,6 @@ pub fn main() !void {
     try b_tree.insert(1, 200);
     try b_tree.insert(2, 900);
     try b_tree.insert(4, 600);
+    try b_tree.insert(12, 600);
+    try b_tree.insert(14, 600);
 }

@@ -1,7 +1,5 @@
 const std = @import("std");
 
-
-
 pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type {
     return struct {
         const This = @This();
@@ -37,6 +35,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         }
 
         pub fn insert(this: *This, key: K, value: V) !void {
+            std.debug.print("Inserting key: {d} value: {d}\n", .{key, value});
             var parent_array = std.ArrayList(*Node).init(this.gpa);
             defer parent_array.deinit();
 
@@ -62,20 +61,63 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             } else {
                 insert_node = parent_array.items[parent_array.items.len - 1];
             }
-            try insert_node.insert(key, value);
+
+            insert_node.insert(key, value) catch |err| {
+                std.debug.print("{any} Spliting node {any}\n", .{err, insert_node});
+                try this.split_nodes(&parent_array, parent_array.items.len - 1, key, value);
+            };
+            this.print();
+        }
+
+        fn split_nodes(this: *This, parent_array: *std.ArrayList(*Node), parent_level: usize, key: K, value: V) !void {
+            const split_node = parent_array.items[parent_level];
+            var key_arr: [m+1]?K = split_node.keys ++ [1]?K{null};
+            var val_arr: [m+1]?V = split_node.values ++ [1]?V{null};
+
+            split_node.insertSortKeys(&key_arr, &val_arr, key, value, null, null);
+
+            const arr_half: usize = (m + 1) / 2;
+            const new_node_left = try this.createNode(split_node.level);
+            const new_node_right = try this.createNode(split_node.level);
+
+            for (0..arr_half) |index| {
+                try new_node_left.insert(key_arr[index].?, val_arr[index].?);
+            }
+            for (arr_half..key_arr.len) | index| {
+                try new_node_right.insert(key_arr[index].?, val_arr[index].?);
+            }
+
+            // TODO: if the root node is full then split the root node, the new nodes make a new level of btree, add the pointers to lower nodes
+            const previous_level = parent_level - 1;
+            if (previous_level < 0) {
+
+            }
+
+            const insert_key = key_arr[arr_half];
+            const modify_pointers_node = parent_array.items[previous_level];
+            modify_pointers_node.insertSortKeys(
+                &modify_pointers_node.keys,
+                &modify_pointers_node.values,
+                insert_key.?,
+                null,
+                new_node_left,
+                new_node_right
+            );
+
+            // TODO: if higher node is full continue splitting
             this.print();
         }
 
         fn findBlankSlot(_: This, current_node: *Node) ?usize {
-           for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
-              if (n_key == null) {
-                  return index;
-              }
-           }
-           return null;
+            for (current_node.keys, 0..current_node.keys.len) |n_key, index| {
+                if (n_key == null) {
+                    return index;
+                }
+            }
+            return null;
         }
 
-        fn createNode(this: This, level: comptime_int) !*Node {
+        fn createNode(this: This, level: u8) !*Node {
             const new_node = try this.gpa.create(Node);
             errdefer this.gpa.destroy(new_node);
 
@@ -132,12 +174,12 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             };
         }
 
-        pub fn insert(this: *This, key: K, value: V) !void {
-            if (!this.hasSpace()) return error.OutOfBounds;
-
+        pub fn insertSortKeys(this: *This, keys: []?K, values: []?V, key: K, value: ?V, node_left: ?*Node, node_right: ?*Node) void {
+            var key_arr = keys;
+            var val_arr = values;
             // Find the correct place for inserting in regards to key sorting
             var insert_index: usize = undefined;
-            for (this.keys, 0..this.keys.len) |n_key, index| {
+            for (key_arr, 0..key_arr.len) |n_key, index| {
                 if (n_key == null or key < n_key.?) {
                     insert_index = index;
                     break;
@@ -145,15 +187,27 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             }
 
             // Shift all values to the right of insertion place
-            for (0..this.keys.len-insert_index-1) |index| {
-                const change_index = this.keys.len-index-1;
-                this.keys[change_index] = this.keys[change_index-1];
-                this.values[change_index] = this.values[change_index-1];
+            for (0..key_arr.len-insert_index-1) |index| {
+                const change_index = key_arr.len-index-1;
+                key_arr[change_index] = key_arr[change_index-1];
+                val_arr[change_index] = val_arr[change_index-1];
             }
+            key_arr[insert_index] = key;
+            val_arr[insert_index] = value;
 
-            // Add new value
-            this.keys[insert_index] = key;
-            this.values[insert_index] = value;
+            // Add new pointers if applicable (not leaf node)
+            if (node_left) |left| {
+                this.pointers[insert_index] = left;
+            }
+            if (node_right) |right| {
+                this.pointers[insert_index+1] = right;
+            }
+        }
+
+        pub fn insert(this: *This, key: K, value: V) !void {
+            if (!this.hasSpace()) return error.OutOfBounds;
+
+            this.insertSortKeys(&this.keys, &this.values, key, value, null, null);
             this.slots -= 1;
         }
 
