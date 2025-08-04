@@ -4,6 +4,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
     return struct {
         const This = @This();
         const Node = BNode(K, V, m);
+        const SplitNode = BSplitNode(K, V, m);
 
         root_node: *Node,
         gpa: std.mem.Allocator,
@@ -13,7 +14,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             const root = try gpa.create(Node);
             errdefer gpa.destroy(root);
 
-            root.* = Node.init(0);
+            root.* = Node.init();
             return This{ .gpa = gpa, .root_node = root, .max_level = 0 };
         }
 
@@ -49,8 +50,8 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             var insert_node: *Node = undefined;
 
             if (parent_array.items.len == 1) {
-                const left_node = try this.createNode(1);
-                insert_node = try this.createNode(1);
+                const left_node = try this.createNode();
+                insert_node = try this.createNode();
 
                 var blank = this.findBlankSlot(this.root_node).?;
                 this.root_node.keys[blank] = key;
@@ -58,55 +59,76 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
 
                 blank = this.findBlankSlot(this.root_node).?;
                 this.root_node.pointers[blank] = insert_node;
+                this.root_node.slots -= 1;
             } else {
                 insert_node = parent_array.items[parent_array.items.len - 1];
             }
 
             insert_node.insert(key, value) catch |err| {
                 std.debug.print("{any} Spliting node {any}\n", .{err, insert_node});
-                try this.split_nodes(&parent_array, parent_array.items.len - 1, key, value);
+                try this.split_nodes(&parent_array, parent_array.items.len - 1, key, value, null);
             };
             this.print();
         }
 
-        fn split_nodes(this: *This, parent_array: *std.ArrayList(*Node), parent_level: usize, key: K, value: V) !void {
+        fn split_nodes(this: *This, parent_array: *std.ArrayList(*Node), parent_level: usize, key: K, value: ?V, _: ?SplitNode) !void {
             const split_node = parent_array.items[parent_level];
             var key_arr: [m+1]?K = split_node.keys ++ [1]?K{null};
             var val_arr: [m+1]?V = split_node.values ++ [1]?V{null};
 
             _ = split_node.insertSortKeys(&key_arr, &val_arr, key, value);
 
+            std.debug.print("KEYS FOR SPLITING: {any}\n", .{key_arr});
+            std.debug.print("VALUES FOR SPLITING: {any}\n", .{val_arr});
+
+            // TODO: based on split node insert correct pointers on next split (if present)
+
             const arr_half: usize = (m + 1) / 2;
-            const new_node_left = try this.createNode(split_node.level);
-            const new_node_right = try this.createNode(split_node.level);
+            const new_node_left = try this.createNode();
+            const new_node_right = try this.createNode();
 
             for (0..arr_half) |index| {
-                try new_node_left.insert(key_arr[index].?, val_arr[index].?);
+                new_node_left.keys[index] = key_arr[index].?;
+                if (val_arr[index]) |val| {
+                    new_node_left.values[index] = val;
+                }
+                new_node_left.slots -= 1;
             }
-            for (arr_half..key_arr.len) | index| {
-                try new_node_right.insert(key_arr[index].?, val_arr[index].?);
+            for (arr_half..key_arr.len, 0..) | index, insert_i| {
+                new_node_right.keys[insert_i] = key_arr[index].?;
+                if (val_arr[index]) |val| {
+                    new_node_right.values[insert_i] = val;
+                }
+                new_node_right.slots -= 1;
             }
+
+            std.debug.print("Node left: {any}\n", .{new_node_left});
+            std.debug.print("Node right: {any}\n", .{new_node_right});
 
             // TODO: if the root node is full then split the root node, the new nodes make a new level of btree, add the pointers to lower nodes
-            const previous_level = parent_level - 1;
-            if (previous_level < 0) {
+            if (parent_level > 0) {
+                const previous_level = parent_level - 1;
+                const insert_key = key_arr[arr_half];
+                const modify_pointers_node = parent_array.items[previous_level];
 
+                // number of slots for values is m, whereas for pointers it's m+1
+                if (modify_pointers_node.slots == 0) {
+                    std.debug.print("GOING BACK THE TREE CURRENT NODE \n{any}\n", .{parent_array.items[parent_level - 1]});
+                    const split_node_pointer = SplitNode.init(new_node_left, new_node_right);
+                    try this.split_nodes(parent_array, parent_level - 1, key_arr[arr_half].?, null, split_node_pointer);
+                }
+
+                const insert_index = modify_pointers_node.insertSortKeys(
+                    &modify_pointers_node.keys,
+                    &modify_pointers_node.values,
+                    insert_key.?,
+                    null
+                );
+                modify_pointers_node.slots -= 1;
+                modify_pointers_node.pointers[insert_index] = new_node_left;
+                modify_pointers_node.pointers[insert_index+1] = new_node_right;
             }
 
-            const insert_key = key_arr[arr_half];
-            const modify_pointers_node = parent_array.items[previous_level];
-            const insert_index = modify_pointers_node.insertSortKeys(
-                &modify_pointers_node.keys,
-                &modify_pointers_node.values,
-                insert_key.?,
-                null
-            );
-
-            // Add new pointers if applicable (not leaf node)
-            modify_pointers_node.pointers[insert_index] = new_node_left;
-            modify_pointers_node.pointers[insert_index+1] = new_node_right;
-
-            // TODO: if higher node is full continue splitting
             this.print();
         }
 
@@ -119,11 +141,11 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             return null;
         }
 
-        fn createNode(this: This, level: u8) !*Node {
+        fn createNode(this: This) !*Node {
             const new_node = try this.gpa.create(Node);
             errdefer this.gpa.destroy(new_node);
 
-            new_node.* = Node.init(level);
+            new_node.* = Node.init();
             return new_node;
         }
 
@@ -146,6 +168,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             std.debug.print("POINTERS {any}\n", .{this.root_node.pointers});
             std.debug.print("KEYS {any}\n", .{this.root_node.keys});
             std.debug.print("VALUES {any}\n", .{this.root_node.values});
+            std.debug.print("SLOTS {any}\n", .{this.root_node.slots});
             std.debug.print("\n", .{});
         }
     };
@@ -161,12 +184,10 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         keys: [m]?K,
         values: [m]?V,
         pointers: [m + 1]?*Node,
-        level: u8,
         slots: u8,
 
-        pub fn init(level: u8) This {
+        pub fn init() This {
             return This{
-                .level = level,
                 .prev_node = null,
                 .next_node = null,
                 .slots = m,
@@ -198,8 +219,6 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             val_arr[insert_index] = value;
 
             return insert_index;
-
-
         }
 
         pub fn insert(this: *This, key: K, value: V) !void {
@@ -228,6 +247,21 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         pub fn getValue(this: This, n: usize) !V {
             if (n >= m) return error.OutOfBounds;
             return this.values[n];
+        }
+    };
+}
+
+
+pub fn BSplitNode(comptime K: type, comptime V: type, comptime m: comptime_int) type {
+    return struct {
+        const This = @This();
+        const Node = BNode(K, V, m);
+
+        left_node: *Node,
+        right_node: *Node,
+
+        pub fn init(left: *Node, right: *Node) This {
+            return This{ .left_node = left, .right_node = right };
         }
     };
 }
