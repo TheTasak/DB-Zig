@@ -74,7 +74,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             var key_arr: [m+1]?K = split_node.keys ++ [1]?K{null};
             var val_arr: [m+1]?V = split_node.values ++ [1]?V{null};
 
-            split_node.insertSortKeys(&key_arr, &val_arr, key, value, null, null);
+            _ = split_node.insertSortKeys(&key_arr, &val_arr, key, value);
 
             const arr_half: usize = (m + 1) / 2;
             const new_node_left = try this.createNode(split_node.level);
@@ -95,14 +95,16 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
 
             const insert_key = key_arr[arr_half];
             const modify_pointers_node = parent_array.items[previous_level];
-            modify_pointers_node.insertSortKeys(
+            const insert_index = modify_pointers_node.insertSortKeys(
                 &modify_pointers_node.keys,
                 &modify_pointers_node.values,
                 insert_key.?,
-                null,
-                new_node_left,
-                new_node_right
+                null
             );
+
+            // Add new pointers if applicable (not leaf node)
+            modify_pointers_node.pointers[insert_index] = new_node_left;
+            modify_pointers_node.pointers[insert_index+1] = new_node_right;
 
             // TODO: if higher node is full continue splitting
             this.print();
@@ -174,7 +176,7 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             };
         }
 
-        pub fn insertSortKeys(this: *This, keys: []?K, values: []?V, key: K, value: ?V, node_left: ?*Node, node_right: ?*Node) void {
+        pub fn insertSortKeys(_: *This, keys: []?K, values: []?V, key: K, value: ?V) usize {
             var key_arr = keys;
             var val_arr = values;
             // Find the correct place for inserting in regards to key sorting
@@ -195,19 +197,15 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             key_arr[insert_index] = key;
             val_arr[insert_index] = value;
 
-            // Add new pointers if applicable (not leaf node)
-            if (node_left) |left| {
-                this.pointers[insert_index] = left;
-            }
-            if (node_right) |right| {
-                this.pointers[insert_index+1] = right;
-            }
+            return insert_index;
+
+
         }
 
         pub fn insert(this: *This, key: K, value: V) !void {
             if (!this.hasSpace()) return error.OutOfBounds;
 
-            this.insertSortKeys(&this.keys, &this.values, key, value, null, null);
+            _ = this.insertSortKeys(&this.keys, &this.values, key, value);
             this.slots -= 1;
         }
 
