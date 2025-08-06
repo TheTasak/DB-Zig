@@ -71,7 +71,7 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             this.print();
         }
 
-        fn split_nodes(this: *This, parent_array: *std.ArrayList(*Node), parent_level: usize, key: K, value: ?V, _: ?SplitNode) !void {
+        fn split_nodes(this: *This, parent_array: *std.ArrayList(*Node), parent_level: usize, key: K, value: ?V, nodes_ptr: ?SplitNode) !void {
             const split_node = parent_array.items[parent_level];
             var key_arr: [m+1]?K = split_node.keys ++ [1]?K{null};
             var val_arr: [m+1]?V = split_node.values ++ [1]?V{null};
@@ -80,8 +80,6 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
 
             std.debug.print("KEYS FOR SPLITING: {any}\n", .{key_arr});
             std.debug.print("VALUES FOR SPLITING: {any}\n", .{val_arr});
-
-            // TODO: based on split node insert correct pointers on next split (if present)
 
             const arr_half: usize = (m + 1) / 2;
             const new_node_left = try this.createNode();
@@ -105,17 +103,21 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             std.debug.print("Node left: {any}\n", .{new_node_left});
             std.debug.print("Node right: {any}\n", .{new_node_right});
 
-            // TODO: if the root node is full then split the root node, the new nodes make a new level of btree, add the pointers to lower nodes
+            if (nodes_ptr) |ptr| {
+                new_node_right.pointers[0] = ptr.left_node;
+                new_node_right.pointers[1] = ptr.right_node;
+            }
+
             if (parent_level > 0) {
                 const previous_level = parent_level - 1;
                 const insert_key = key_arr[arr_half];
                 const modify_pointers_node = parent_array.items[previous_level];
 
-                // number of slots for values is m, whereas for pointers it's m+1
                 if (modify_pointers_node.slots == 0) {
-                    std.debug.print("GOING BACK THE TREE CURRENT NODE \n{any}\n", .{parent_array.items[parent_level - 1]});
+                    std.debug.print("GOING BACK THE TREE. CURRENT NODE \n{any}\n", .{parent_array.items[previous_level]});
                     const split_node_pointer = SplitNode.init(new_node_left, new_node_right);
-                    try this.split_nodes(parent_array, parent_level - 1, key_arr[arr_half].?, null, split_node_pointer);
+                    try this.split_nodes(parent_array, previous_level, key_arr[arr_half].?, null, split_node_pointer);
+                    return;
                 }
 
                 const insert_index = modify_pointers_node.insertSortKeys(
@@ -127,6 +129,26 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
                 modify_pointers_node.slots -= 1;
                 modify_pointers_node.pointers[insert_index] = new_node_left;
                 modify_pointers_node.pointers[insert_index+1] = new_node_right;
+            } else {
+                std.debug.print("\nPARENT LEVEL\n", .{});
+                std.debug.print("LEFT NODE: \n", .{});
+                new_node_left.print(0);
+                std.debug.print("RIGHT NODE: \n", .{});
+                new_node_right.print(0);
+
+                new_node_left.pointers[0] = this.root_node.pointers[0];
+                new_node_left.pointers[1] = this.root_node.pointers[1];
+                new_node_left.pointers[2] = this.root_node.pointers[2];
+
+                const new_main = try this.createNode();
+                new_main.keys[0] = new_node_right.keys[0];
+                new_node_right.removeNth(0, true);
+
+                new_main.pointers[0] = new_node_left;
+                new_main.pointers[1] = new_node_right;
+                new_main.slots -= 1;
+
+                this.root_node = new_main;
             }
 
             this.print();
@@ -165,11 +187,15 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         }
 
         pub fn print(this: This) void {
-            std.debug.print("POINTERS {any}\n", .{this.root_node.pointers});
             std.debug.print("KEYS {any}\n", .{this.root_node.keys});
             std.debug.print("VALUES {any}\n", .{this.root_node.values});
             std.debug.print("SLOTS {any}\n", .{this.root_node.slots});
             std.debug.print("\n", .{});
+            for (0..this.root_node.pointers.len) |index| {
+                if (this.root_node.pointers[index]) |pointer| {
+                   pointer.print(1);
+                }
+            }
         }
     };
 }
@@ -228,6 +254,35 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
             this.slots -= 1;
         }
 
+        pub fn remove(this: *This, key: K) bool {
+            var remove_index: usize = undefined;
+            for (this.keys, 0..this.keys.len) |n_key, index| {
+                if (n_key == key) {
+                    remove_index = index;
+                }
+            }
+            this.removeNth(remove_index);
+            if (this.slots > m) {
+                std.debug.print("NODE IS EMPTY, TIME FOR MERGING", .{});
+            }
+        }
+
+        fn removeNth(this: *This, n: usize, onlyKeyValue: bool) void {
+            for (n..this.keys.len - 1) |index| {
+                this.keys[index] = this.keys[index + 1];
+                this.values[index] = this.values[index + 1];
+                if (!onlyKeyValue) {
+                    this.pointers[index] = this.pointers[index + 1];
+                }
+            }
+            this.keys[this.keys.len - 1] = null;
+            this.values[this.values.len - 1] = null;
+            if (!onlyKeyValue) {
+                this.pointers[this.pointers.len - 1] = null;
+            }
+            this.slots += 1;
+        }
+
         pub fn upperBound(this: This) K {
             return this.keys[m - this.slots];
         }
@@ -247,6 +302,30 @@ pub fn BNode(comptime K: type, comptime V: type, comptime m: comptime_int) type 
         pub fn getValue(this: This, n: usize) !V {
             if (n >= m) return error.OutOfBounds;
             return this.values[n];
+        }
+
+        pub fn print(this: This, indent: usize) void {
+            for (0..indent) |_| {
+                std.debug.print("\t", .{});
+            }
+            std.debug.print("KEY: {any}\n", .{this.keys});
+            for (0..indent) |_| {
+                std.debug.print("\t", .{});
+            }
+            std.debug.print("VALUE: {any}\n", .{this.values});
+            for (0..indent) |_| {
+                std.debug.print("\t", .{});
+            }
+            std.debug.print("SLOTS: {any}\n", .{this.slots});
+            for (0..indent) |_| {
+                std.debug.print("\t", .{});
+            }
+            std.debug.print("POINTER:\n\n", .{});
+            for (0..this.pointers.len) |index| {
+                if (this.pointers[index]) |pointer| {
+                    pointer.print(indent + 1);
+                }
+            }
         }
     };
 }

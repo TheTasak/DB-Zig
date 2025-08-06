@@ -106,7 +106,7 @@ pub fn main() !void {
     // };
     var b_tree = try btree.BTree(u16, u16, 3).init(allocator);
     defer b_tree.deinit();
-    const keys = [_]u16 {3, 10, 1, 2, 4, 12, 14, 16, 15, 17};
+    const keys = [_]u16 {3, 10, 1, 2, 4, 12, 14, 16, 15, 17, 32, 33, 2, 12, 31, 24};
     for (keys) |key| {
         try b_tree.insert(key, 100);
     }
