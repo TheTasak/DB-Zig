@@ -128,7 +128,10 @@ pub fn BTree(comptime K: type, comptime V: type, comptime m: comptime_int) type 
                 );
                 modify_pointers_node.slots -= 1;
                 modify_pointers_node.pointers[insert_index] = new_node_left;
-                modify_pointers_node.pointers[insert_index+1] = new_node_right;
+                if (modify_pointers_node.pointers[insert_index + 1]) |pointer| {
+                    modify_pointers_node.pointers[insert_index + 1 + 1] = pointer;
+                }
+                modify_pointers_node.pointers[insert_index + 1] = new_node_right;
             } else {
                 std.debug.print("\nPARENT LEVEL\n", .{});
                 std.debug.print("LEFT NODE: \n", .{});
